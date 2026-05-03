@@ -108,7 +108,9 @@
       <input type="email" id="email" placeholder="your@email.com" autocomplete="email" />
       <label>Password</label>
       <input type="password" id="password" placeholder="Password" autocomplete="current-password" />
-      <button class="btn" id="actionBtn" onclick="handleAction()">Sign In</button>
+      <button class="btn" id="googleBtn" onclick="handleGoogle()">🔵 Sign in with Google</button>
+      <div style="text-align:center; color:#555; font-size:13px; margin:8px 0">— or —</div>
+      <button class="btn" id="actionBtn" onclick="handleAction()">Sign In with Email</button>
       <div class="toggle">
         <span id="toggleText">Don't have an account?</span>
         <a onclick="toggleMode()">Sign Up</a>
@@ -124,7 +126,7 @@
 
   <script type="module">
     import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
-    import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
+    import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, GoogleAuthProvider, signInWithPopup } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
     import { getFirestore, doc, setDoc, serverTimestamp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
 
     const app = initializeApp({
@@ -147,6 +149,30 @@
       document.getElementById('codeDisplay').style.display = 'block';
       document.getElementById('codeValue').textContent = sessionCode;
       document.getElementById('subtitle').textContent = 'Sign in to connect your TV';
+    }
+
+    window.handleGoogle = async () => {
+      const btn = document.getElementById('googleBtn');
+      btn.disabled = true;
+      btn.textContent = 'Signing in…';
+      try {
+        const provider = new GoogleAuthProvider();
+        const cred = await signInWithPopup(auth, provider);
+        await completeSignIn(cred.user.uid);
+      } catch(e) {
+        btn.disabled = false;
+        btn.textContent = '🔵 Sign in with Google';
+        document.getElementById('errorMsg').textContent = e.code === 'auth/popup-closed-by-user' ? '' : e.message;
+      }
+    };
+
+    async function completeSignIn(uid) {
+      if (sessionCode) {
+        await setDoc(doc(db, 'tvSessions', sessionCode), { uid, status: 'pending_token', createdAt: serverTimestamp() }, { merge: true });
+        showSuccess('Your TV should sign in automatically in a moment.');
+      } else {
+        showSuccess('You\'re signed in!');
+      }
     }
 
     window.toggleMode = () => {
@@ -174,19 +200,7 @@
           ? await createUserWithEmailAndPassword(auth, email, password)
           : await signInWithEmailAndPassword(auth, email, password);
 
-        const uid = cred.user.uid;
-
-        if (sessionCode) {
-          // Write uid to Firestore session — Cloud Function will generate custom token
-          await setDoc(doc(db, 'tvSessions', sessionCode), {
-            uid,
-            status: 'pending_token',
-            createdAt: serverTimestamp()
-          }, { merge: true });
-          showSuccess('Your TV should sign in automatically in a moment.');
-        } else {
-          showSuccess('You\'re signed in! Open the app to continue.');
-        }
+        await completeSignIn(cred.user.uid);
       } catch (e) {
         btn.disabled = false;
         btn.textContent = isSignUp ? 'Create Account' : 'Sign In';
