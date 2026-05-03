@@ -45,42 +45,28 @@
       border: 1px solid #333;
     }
     .tv-code span { color: #e53935; font-weight: 700; font-size: 18px; letter-spacing: 3px; }
-    label { display: block; font-size: 13px; color: #aaa; margin-bottom: 6px; }
-    input {
-      width: 100%;
-      background: #111;
-      border: 1.5px solid #333;
-      border-radius: 10px;
-      padding: 14px 16px;
-      color: #fff;
-      font-size: 16px;
-      margin-bottom: 16px;
-      outline: none;
-      transition: border-color 0.2s;
-    }
-    input:focus { border-color: #e53935; }
     .btn {
       width: 100%;
-      background: #e53935;
-      color: #fff;
+      background: #fff;
+      color: #000;
       border: none;
       border-radius: 10px;
       padding: 16px;
       font-size: 16px;
       font-weight: 600;
       cursor: pointer;
-      transition: background 0.2s;
-      margin-bottom: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
     }
-    .btn:hover { background: #c62828; }
-    .btn:disabled { background: #444; cursor: not-allowed; }
-    .btn-secondary {
-      background: transparent;
-      border: 1.5px solid #333;
-      color: #aaa;
+    .btn:hover { background: #f0f0f0; }
+    .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .g-logo {
+      width: 20px; height: 20px;
+      background: url('https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg') center/contain no-repeat;
     }
-    .btn-secondary:hover { border-color: #555; background: #1f1f1f; }
-    .error { color: #ff5252; font-size: 13px; text-align: center; margin-bottom: 12px; min-height: 18px; }
+    .error { color: #ff5252; font-size: 13px; text-align: center; margin-top: 12px; min-height: 18px; }
     .success {
       text-align: center;
       padding: 20px;
@@ -88,33 +74,29 @@
     .success .check { font-size: 56px; margin-bottom: 16px; }
     .success h2 { font-size: 20px; margin-bottom: 8px; }
     .success p { color: #888; font-size: 14px; }
-    .toggle { text-align: center; font-size: 13px; color: #888; margin-top: 8px; }
-    .toggle a { color: #e53935; text-decoration: none; cursor: pointer; }
+    .loading { text-align: center; color: #888; font-size: 14px; padding: 20px 0; }
   </style>
 </head>
 <body>
   <div class="card">
     <div class="logo">📺</div>
     <h1>GO Videos</h1>
-    <p class="subtitle" id="subtitle">Sign in to your account</p>
+    <p class="subtitle" id="subtitle">Sign in to continue</p>
 
     <div class="tv-code" id="codeDisplay" style="display:none">
       Linking TV code: <span id="codeValue"></span>
     </div>
 
     <div id="authForm">
+      <button class="btn" id="googleBtn" onclick="handleGoogle()">
+        <div class="g-logo"></div>
+        Sign in with Google
+      </button>
       <div id="errorMsg" class="error"></div>
-      <label>Email</label>
-      <input type="email" id="email" placeholder="your@email.com" autocomplete="email" />
-      <label>Password</label>
-      <input type="password" id="password" placeholder="Password" autocomplete="current-password" />
-      <button class="btn" id="googleBtn" onclick="handleGoogle()">🔵 Sign in with Google</button>
-      <div style="text-align:center; color:#555; font-size:13px; margin:8px 0">— or —</div>
-      <button class="btn" id="actionBtn" onclick="handleAction()">Sign In with Email</button>
-      <div class="toggle">
-        <span id="toggleText">Don't have an account?</span>
-        <a onclick="toggleMode()">Sign Up</a>
-      </div>
+    </div>
+
+    <div id="loadingScreen" class="loading" style="display:none">
+      Redirecting to Google…
     </div>
 
     <div id="successScreen" class="success" style="display:none">
@@ -126,7 +108,7 @@
 
   <script type="module">
     import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
-    import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, GoogleAuthProvider, signInWithRedirect, getRedirectResult } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
+    import { getAuth, GoogleAuthProvider, signInWithRedirect, getRedirectResult } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
     import { getFirestore, doc, setDoc, serverTimestamp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
 
     const app = initializeApp({
@@ -140,10 +122,8 @@
     const auth = getAuth(app);
     const db = getFirestore(app);
 
-    // Get session code from URL
     const params = new URLSearchParams(window.location.search);
     const sessionCode = params.get('code');
-    let isSignUp = false;
 
     if (sessionCode) {
       document.getElementById('codeDisplay').style.display = 'block';
@@ -151,82 +131,41 @@
       document.getElementById('subtitle').textContent = 'Sign in to connect your TV';
     }
 
-    // Handle redirect result on page load (returning from Google)
+    // Handle redirect result on return from Google
     getRedirectResult(auth).then(async (result) => {
       if (result && result.user) {
         await completeSignIn(result.user.uid);
       }
     }).catch((e) => {
-      if (e.code !== 'auth/no-current-user') {
-        document.getElementById('errorMsg').textContent = e.message;
-      }
+      document.getElementById('errorMsg').textContent = e.message;
     });
 
     window.handleGoogle = () => {
+      document.getElementById('authForm').style.display = 'none';
+      document.getElementById('loadingScreen').style.display = 'block';
       const provider = new GoogleAuthProvider();
       signInWithRedirect(auth, provider);
     };
 
     async function completeSignIn(uid) {
       if (sessionCode) {
-        await setDoc(doc(db, 'tvSessions', sessionCode), { uid, status: 'pending_token', createdAt: serverTimestamp() }, { merge: true });
+        await setDoc(doc(db, 'tvSessions', sessionCode), {
+          uid,
+          status: 'pending_token',
+          createdAt: serverTimestamp()
+        }, { merge: true });
         showSuccess('Your TV should sign in automatically in a moment.');
       } else {
-        showSuccess('You\'re signed in!');
+        showSuccess("You're signed in! Open the app to continue.");
       }
     }
-
-    window.toggleMode = () => {
-      isSignUp = !isSignUp;
-      document.getElementById('actionBtn').textContent = isSignUp ? 'Create Account' : 'Sign In';
-      document.getElementById('toggleText').textContent = isSignUp ? 'Already have an account?' : "Don't have an account?";
-      document.querySelector('.toggle a').textContent = isSignUp ? 'Sign In' : 'Sign Up';
-      document.getElementById('errorMsg').textContent = '';
-    };
-
-    window.handleAction = async () => {
-      const email = document.getElementById('email').value.trim();
-      const password = document.getElementById('password').value;
-      const btn = document.getElementById('actionBtn');
-      const errEl = document.getElementById('errorMsg');
-
-      if (!email || !password) { errEl.textContent = 'Please fill in all fields.'; return; }
-
-      btn.disabled = true;
-      btn.textContent = isSignUp ? 'Creating account…' : 'Signing in…';
-      errEl.textContent = '';
-
-      try {
-        const cred = isSignUp
-          ? await createUserWithEmailAndPassword(auth, email, password)
-          : await signInWithEmailAndPassword(auth, email, password);
-
-        await completeSignIn(cred.user.uid);
-      } catch (e) {
-        btn.disabled = false;
-        btn.textContent = isSignUp ? 'Create Account' : 'Sign In';
-        const msgs = {
-          'auth/user-not-found': 'No account found with that email.',
-          'auth/wrong-password': 'Incorrect password.',
-          'auth/email-already-in-use': 'An account with that email already exists.',
-          'auth/invalid-email': 'Please enter a valid email address.',
-          'auth/weak-password': 'Password must be at least 6 characters.',
-          'auth/too-many-requests': 'Too many attempts. Please try again later.',
-        };
-        errEl.textContent = msgs[e.code] || e.message;
-      }
-    };
 
     function showSuccess(msg) {
       document.getElementById('authForm').style.display = 'none';
+      document.getElementById('loadingScreen').style.display = 'none';
       document.getElementById('successMsg').textContent = msg;
       document.getElementById('successScreen').style.display = 'block';
     }
-
-    // Allow Enter key
-    document.addEventListener('keydown', e => {
-      if (e.key === 'Enter') window.handleAction();
-    });
   </script>
 </body>
 </html>
