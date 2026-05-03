@@ -126,7 +126,7 @@
 
   <script type="module">
     import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
-    import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, GoogleAuthProvider, signInWithPopup } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
+    import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, GoogleAuthProvider, signInWithRedirect, getRedirectResult } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
     import { getFirestore, doc, setDoc, serverTimestamp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
 
     const app = initializeApp({
@@ -151,19 +151,20 @@
       document.getElementById('subtitle').textContent = 'Sign in to connect your TV';
     }
 
-    window.handleGoogle = async () => {
-      const btn = document.getElementById('googleBtn');
-      btn.disabled = true;
-      btn.textContent = 'Signing in…';
-      try {
-        const provider = new GoogleAuthProvider();
-        const cred = await signInWithPopup(auth, provider);
-        await completeSignIn(cred.user.uid);
-      } catch(e) {
-        btn.disabled = false;
-        btn.textContent = '🔵 Sign in with Google';
-        document.getElementById('errorMsg').textContent = e.code === 'auth/popup-closed-by-user' ? '' : e.message;
+    // Handle redirect result on page load (returning from Google)
+    getRedirectResult(auth).then(async (result) => {
+      if (result && result.user) {
+        await completeSignIn(result.user.uid);
       }
+    }).catch((e) => {
+      if (e.code !== 'auth/no-current-user') {
+        document.getElementById('errorMsg').textContent = e.message;
+      }
+    });
+
+    window.handleGoogle = () => {
+      const provider = new GoogleAuthProvider();
+      signInWithRedirect(auth, provider);
     };
 
     async function completeSignIn(uid) {
